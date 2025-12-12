@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Floor Plan Designer</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f4f7f6;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .controls {
+            background: white;
+            padding: 15px 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+        
+        button.primary { background: #2563eb; color: white; }
+        button.primary:hover { background: #1e40af; }
+        
+        button.secondary { background: #e2e8f0; color: #1e293b; }
+        button.secondary:hover { background: #cbd5e1; }
+
+        #canvas-container {
+            border: 2px solid #ccc;
+            background-color: #ffffff;
+            cursor: crosshair;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <button class="primary" id="draw-rect-btn">Draw Room</button>
+        <button class="secondary" id="clear-btn">Clear Plan</button>
+        <button class="secondary" id="save-btn">Save Plan Data</button>
+        <button class="secondary" id="load-btn">Load Plan Data</button>
+    </div>
+
+    <div id="canvas-container">
+        <canvas id="planner-canvas" width="800" height="500"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('planner-canvas');
+        const ctx = canvas.getContext('2d');
+
+        let isDrawing = false;
+        let startX, startY;
+        let currentRect = null;
+        let rooms = [];
+        const scale = 50; // 1 unit in drawing = 1 meter for scale display
+
+        // --- Drawing Logic ---
+
+        function drawGrid() {
+            const gridSize = 50; // Draw lines every 50 pixels
+            ctx.strokeStyle = '#eee';
+            ctx.lineWidth = 0.5;
+
+            // Vertical lines
+            for (let x = 0; x <= canvas.width; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+
+            // Horizontal lines
+            for (let y = 0; y <= canvas.height; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+        }
+
+        function drawRooms() {
+            // 1. Clear everything
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawGrid();
+
+            // 2. Draw all saved rooms
+            rooms.forEach(room => {
+                ctx.fillStyle = room.fill;
+                ctx.strokeStyle = room.stroke;
+                ctx.lineWidth = 2;
+                ctx.fillRect(room.x, room.y, room.w, room.h);
+                ctx.strokeRect(room.x, room.y, room.w, room.h);
+
+                // Add dimension labels (in meters)
+                const widthMeters = (room.w / scale).toFixed(1);
+                const heightMeters = (room.h / scale).toFixed(1);
+                
+                ctx.fillStyle = '#1e293b';
+                ctx.font = '12px Arial';
+                ctx.fillText(`${widthMeters}m`, room.x + room.w / 2 - 20, room.y + room.h + 15);
+                ctx.fillText(`${heightMeters}m`, room.x + room.w + 5, room.y + room.h / 2);
+            });
+
+            // 3. Draw the current rectangle if one is being drawn
+            if (currentRect) {
+                ctx.fillStyle = 'rgba(255, 99, 71, 0.5)'; // Translucent red while drawing
+                ctx.strokeStyle = '#cc0000';
+                ctx.lineWidth = 2;
+                ctx.fillRect(currentRect.x, currentRect.y, currentRect.w, currentRect.h);
+                ctx.strokeRect(currentRect.x, currentRect.y, currentRect.w, currentRect.h);
+            }
+        }
+        
+        // --- Event Handlers ---
+
+        function startDrawing(e) {
+            if (!isDrawing) return;
+            const rect = canvas.getBoundingClientRect();
+            startX = e.clientX - rect.left;
+            startY = e.clientY - rect.top;
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            const w = mouseX - startX;
+            const h = mouseY - startY;
+
+            // Snap start points to the grid
+            const gridSnap = 5; // Snap interval in pixels
+            const x = Math.floor(startX / gridSnap) * gridSnap;
+            const y = Math.floor(startY / gridSnap) * gridSnap;
+
+            currentRect = { x: x, y: y, w: w, h: h };
+            drawRooms(); // Redraw everything
+        }
+
+        function stopDrawing() {
+            if (!isDrawing || !currentRect) return;
+            
+            // Finalize the current room and save it to the rooms array
+            rooms.push({
+                x: currentRect.x,
+                y: currentRect.y,
+                w: currentRect.w,
+                h: currentRect.h,
+                fill: 'rgba(100, 149, 237, 0.4)', // CornflowerBlue
+                stroke: '#1e293b'
+            });
+
+            currentRect = null;
+            isDrawing = false;
+            canvas.style.cursor = 'default';
+            drawRooms();
+            alert(`Room created: ${(currentRect?.w / scale).toFixed(1)}m x ${(currentRect?.h / scale).toFixed(1)}m`);
+        }
+
+        // --- Control Functions ---
+
+        document.getElementById('draw-rect-btn').onclick = () => {
+            isDrawing = true;
+            canvas.style.cursor = 'crosshair';
+            alert('Click and drag on the canvas to draw a rectangular room.');
+        };
+
+        document.getElementById('clear-btn').onclick = () => {
+            if (confirm('Are you sure you want to clear the entire plan?')) {
+                rooms = [];
+                currentRect = null;
+                drawRooms();
+            }
+        };
+
+        document.getElementById('save-btn').onclick = () => {
+            try {
+                const planData = JSON.stringify(rooms);
+                localStorage.setItem('floorPlanData', planData);
+                alert('Plan saved successfully in your browser!');
+            } catch (e) {
+                alert('Could not save plan. Browser storage error.');
+            }
+        };
+
+        document.getElementById('load-btn').onclick = () => {
+            try {
+                const planData = localStorage.getItem('floorPlanData');
+                if (planData) {
+                    rooms = JSON.parse(planData);
+                    drawRooms();
+                    alert('Plan loaded successfully!');
+                } else {
+                    alert('No saved plan data found.');
+                }
+            } catch (e) {
+                alert('Error loading plan data.');
+            }
+        };
+
+        // Attach listeners to canvas
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', stopDrawing);
+        canvas.addEventListener('mouseout', stopDrawing);
+
+        // Initial setup
+        drawRooms(); 
+    </script>
+</body>
+</html>
