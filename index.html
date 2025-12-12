@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Simple Map Snap</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.css" />
+    <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.min.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <style>
+        body { margin: 0; font-family: sans-serif; background: #f4f7f6; }
+        
+        /* Simple Header Bar */
+        .top-bar {
+            position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+            z-index: 2000; background: white; padding: 10px 20px;
+            border-radius: 50px; display: flex; gap: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: 90%; max-width: 600px;
+        }
+
+        input { flex: 1; border: none; outline: none; font-size: 16px; }
+        button { background: #2563eb; color: white; border: none; padding: 8px 18px; border-radius: 20px; cursor: pointer; font-weight: bold; }
+        button.download { background: #16a34a; }
+
+        /* The Map */
+        #map-container { height: 100vh; width: 100vw; position: relative; }
+        #map { height: 100%; width: 100%; }
+
+        /* Result Box */
+        .result-box {
+            position: fixed; bottom: 20px; left: 20px; z-index: 2000;
+            background: white; padding: 15px; border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1); border-left: 5px solid #2563eb;
+        }
+        h2 { margin: 0; font-size: 18px; }
+        p { margin: 5px 0 0; color: #666; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+    <div class="top-bar">
+        <input type="text" id="search" placeholder="Type address OR coordinates (Lat, Lon)...">
+        <button onclick="handleSearch()">Find</button>
+        <button class="download" onclick="takeSnapshot()">Download PNG</button>
+    </div>
+
+    <div id="map-container">
+        <div id="map"></div>
+        <div class="result-box">
+            <h2 id="area-text">0.00 Acres</h2>
+            <p id="coord-text">Search a location to begin</p>
+        </div>
+    </div>
+
+<script>
+    // 1. Setup Map
+    const map = L.map('map', { preferCanvas: true }).setView([0,0], 2);
+    
+    // Add Satellite View by default (Best for surveyors)
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        crossOrigin: true
+    }).addTo(map);
+
+    // Add drawing tools (Simplified)
+    map.pm.addControls({
+        position: 'topleft',
+        drawMarker: false, drawCircle: false, drawPolyline: false,
+        drawRectangle: true, drawPolygon: true, removalMode: true
+    });
+
+    // 2. Intelligence: Address or Coordinate?
+    async function handleSearch() {
+        const input = document.getElementById('search').value;
+        const coordRegex = /^(-?\d+(\.\d+)?),\s*(-?\d+(\.\d+)?)$/;
+        
+        if (coordRegex.test(input)) {
+            const [lat, lon] = input.split(',').map(n => parseFloat(n.trim()));
+            moveTo(lat, lon, "Point at " + input);
+        } else {
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${input}`);
+            const data = await res.json();
+            if (data[0]) moveTo(data[0].lat, data[0].lon, data[0].display_name);
+        }
+    }
+
+    function moveTo(lat, lon, name) {
+        map.setView([lat, lon], 18);
+        document.getElementById('coord-text').innerText = `${name.split(',')[0]} (${lat}, ${lon})`;
+    }
+
+    // 3. Auto-Calculate Area
+    map.on('pm:create', (e) => {
+        const area = turf.area(e.layer.toGeoJSON());
+        const acres = (area * 0.000247105).toFixed(3);
+        document.getElementById('area-text').innerText = acres + " Acres";
+        
+        e.layer.on('pm:edit', () => {
+            const newArea = turf.area(e.layer.toGeoJSON());
+            document.getElementById('area-text').innerText = (newArea * 0.000247105).toFixed(3) + " Acres";
+        });
+    });
+
+    // 4. Download Snapshot
+    function takeSnapshot() {
+        const controls = document.querySelector('.leaflet-control-container');
+        controls.style.display = 'none'; // Clean image
+
+        html2canvas(document.getElementById('map-container'), { useCORS: true, scale: 2 }).then(canvas => {
+            const link = document.createElement('a');
+            link.download = 'Plot-Design.png';
+            link.href = canvas.toDataURL();
+            link.click();
+            controls.style.display = 'block';
+        });
+    }
+</script>
+</body>
+</html>
