@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FloorPlan Designer - Multi-Tool</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f4f8;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .controls {
+            background: white;
+            padding: 15px 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+        
+        button.tool-mode { background: #2563eb; color: white; }
+        button.tool-mode:hover, button.tool-mode.active { background: #1e40af; }
+        
+        button.utility { background: #e2e8f0; color: #1e293b; }
+        button.utility:hover { background: #cbd5e1; }
+
+        #canvas-container {
+            border: 2px solid #ccc;
+            background-color: #ffffff;
+            cursor: default; 
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        
+        .drawing-active {
+            cursor: crosshair !important;
+        }
+
+        #tool-message {
+            margin-top: 10px;
+            font-size: 0.9em;
+            color: #cc0000;
+            font-weight: bold;
+            min-height: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <button class="tool-mode" id="mode-rect">Draw Room (Area)</button>
+        <button class="tool-mode" id="mode-line">Draw Wall (Line)</button>
+
+        <button class="utility" id="clear-btn">Clear Plan</button>
+        <button class="utility" id="save-btn">Save Plan</button>
+        <button class="utility" id="load-btn">Load Plan</button>
+    </div>
+    
+    <div id="tool-message">Select a tool above to begin designing your floor plan.</div>
+
+    <div id="canvas-container">
+        <canvas id="planner-canvas" width="900" height="600"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('planner-canvas');
+        const ctx = canvas.getContext('2d');
+        const toolMessage = document.getElementById('tool-message');
+
+        let isDrawing = false; 
+        let currentTool = 'rect'; // Default tool is 'rect' (Room)
+        let startX, startY;
+        let currentShape = null;
+        let objects = []; // Stores all lines and rooms
+        const scale = 50; // 50 pixels = 1 meter
+        const gridSize = 50; 
+
+        // --- Drawing Logic ---
+
+        function drawGrid() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = '#eee';
+            ctx.lineWidth = 0.5;
+
+            // Draw grid lines
+            for (let x = 0; x <= canvas.width; x += gridSize) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+            }
+            for (let y = 0; y <= canvas.height; y += gridSize) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+            }
+        }
+
+        function drawObjects() {
+            drawGrid();
+
+            objects.forEach(obj => {
+                ctx.strokeStyle = obj.stroke || '#1e293b';
+                ctx.lineWidth = obj.type === 'line' ? 4 : 2; // Thicker line for walls
+
+                if (obj.type === 'rect') {
+                    ctx.fillStyle = obj.fill || 'rgba(100, 149, 237, 0.4)';
+                    ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+                    ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
+                    
+                    // Add dimension labels
+                    drawDimensionLabel(obj.x, obj.y, obj.w, obj.h);
+
+                } else if (obj.type === 'line') {
+                    ctx.beginPath();
+                    ctx.moveTo(obj.x1, obj.y1);
+                    ctx.lineTo(obj.x2, obj.y2);
+                    ctx.stroke();
+                    drawDimensionLabel(obj.x1, obj.y1, obj.x2 - obj.x1, obj.y2 - obj.y1, true);
+                }
+            });
+
+            // Draw the temporary shape
+            if (currentShape) {
+                ctx.strokeStyle = '#cc0000';
+                ctx.lineWidth = currentTool === 'line' ? 4 : 2;
+
+                if (currentTool === 'rect') {
+                    ctx.fillStyle = 'rgba(255, 99, 71, 0.5)';
+                    ctx.fillRect(currentShape.x, currentShape.y, currentShape.w, currentShape.h);
+                    ctx.strokeRect(currentShape.x, currentShape.y, currentShape.w, currentShape.h);
+                } else if (currentTool === 'line') {
+                    ctx.beginPath();
+                    ctx.moveTo(currentShape.x1, currentShape.y1);
+                    ctx.lineTo(currentShape.x2, currentShape.y2);
+                    ctx.stroke();
+                }
+            }
+        }
+        
+        // --- Dimension and Area Display ---
+
+        function drawDimensionLabel(x, y, w, h, isLine = false) {
+            const widthMeters = (Math.abs(w) / scale).toFixed(2);
+            const heightMeters = (Math.abs(h) / scale).toFixed(2);
+            
+            ctx.fillStyle = '#0f172a';
+            ctx.font = '12px Arial';
+
+            if (!isLine) { // Rectangle/Room
+                const area = (widthMeters * heightMeters).toFixed(2);
+                ctx.fillText(`Area: ${area}m²`, x + w / 2 - 40, y + h / 2);
+                ctx.fillText(`${widthMeters}m`, x + w / 2 - 20, y + h + 20);
+                ctx.fillText(`${heightMeters}m`, x + w + 5, y + h / 2);
+            } else { // Line/Wall
+                const length = Math.sqrt(w*w + h*h);
+                const lengthMeters = (length / scale).toFixed(2);
+                
+                const midX = x + w / 2;
+                const midY = y + h / 2;
+                const angle = Math.atan2(h, w);
+                
+                ctx.save();
+                ctx.translate(midX, midY);
+                ctx.rotate(angle);
+                ctx.fillText(`${lengthMeters}m`, 5, -8);
+                ctx.restore();
+            }
+        }
+
+        // --- Utility ---
+
+        function getSnappedCoord(coord) {
+            return Math.round(coord / gridSize) * gridSize;
+        }
+
+        // --- Mouse Event Handlers ---
+
+        function startDrawing(e) {
+            if (!currentTool) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            startX = getSnappedCoord(e.clientX - rect.left);
+            startY = getSnappedCoord(e.clientY - rect.top);
+            
+            isDrawing = true;
+            canvas.classList.add('drawing-active');
+
+            if (currentTool === 'rect') {
+                currentShape = { type: 'rect', x: startX, y: startY, w: 0, h: 0 };
+            } else if (currentTool === 'line') {
+                currentShape = { type: 'line', x1: startX, y1: startY, x2: startX, y2: startY };
+            }
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = getSnappedCoord(e.clientX - rect.left);
+            const mouseY = getSnappedCoord(e.clientY - rect.top);
+
+            const w = mouseX - startX;
+            const h = mouseY - startY;
+
+            if (currentTool === 'rect') {
+                currentShape.w = w;
+                currentShape.h = h;
+                const area = (Math.abs(w / scale) * Math.abs(h / scale)).toFixed(2);
+                toolMessage.textContent = `Drawing Room... Size: ${(Math.abs(w) / scale).toFixed(2)}m x ${(Math.abs(h) / scale).toFixed(2)}m (Area: ${area}m²)`;
+            } else if (currentTool === 'line') {
+                currentShape.x2 = mouseX;
+                currentShape.y2 = mouseY;
+                const length = Math.sqrt(w*w + h*h);
+                toolMessage.textContent = `Drawing Wall... Length: ${(length / scale).toFixed(2)}m`;
+            }
+
+            drawObjects();
+        }
+
+        function stopDrawing() {
+            if (!isDrawing) return;
+            isDrawing = false;
+            canvas.classList.remove('drawing-active');
+
+            if (currentShape) {
+                if (currentTool === 'rect' && Math.abs(currentShape.w) > gridSize && Math.abs(currentShape.h) > gridSize) {
+                    // Finalize room
+                    const finalW = Math.abs(currentShape.w);
+                    const finalH = Math.abs(currentShape.h);
+                    const finalX = currentShape.w < 0 ? currentShape.x + currentShape.w : currentShape.x;
+                    const finalY = currentShape.h < 0 ? currentShape.y + currentShape.h : currentShape.y;
+                    
+                    objects.push({ type: 'rect', x: finalX, y: finalY, w: finalW, h: finalH });
+                    toolMessage.textContent = `Room (Area: ${(finalW / scale * finalH / scale).toFixed(2)}m²) created.`;
+                } else if (currentTool === 'line' && (currentShape.x1 !== currentShape.x2 || currentShape.y1 !== currentShape.y2)) {
+                    // Finalize wall
+                    objects.push(currentShape);
+                    toolMessage.textContent = `Wall created.`;
+                } else {
+                    toolMessage.textContent = `Shape too small or invalid.`;
+                }
+            }
+
+            currentShape = null;
+            drawObjects();
+        }
+
+        // --- Toolbar Control ---
+
+        document.querySelectorAll('.tool-mode').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.tool-mode').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                
+                currentTool = e.target.id === 'mode-rect' ? 'rect' : 'line';
+                toolMessage.textContent = `Tool switched to: ${currentTool === 'rect' ? 'Draw Room' : 'Draw Wall'}. Click and drag on the canvas.`;
+            });
+        });
+
+        document.getElementById('clear-btn').onclick = () => {
+            if (confirm('Are you sure you want to clear the entire plan?')) {
+                objects = [];
+                drawObjects();
+                toolMessage.textContent = "Plan cleared. Select a tool to start a new plan.";
+            }
+        };
+
+        document.getElementById('save-btn').onclick = () => {
+            try {
+                localStorage.setItem('floorPlanData', JSON.stringify(objects));
+                toolMessage.textContent = 'Plan saved successfully in your browser!';
+            } catch (e) {
+                toolMessage.textContent = 'Error: Could not save plan.';
+            }
+        };
+
+        document.getElementById('load-btn').onclick = () => {
+            try {
+                const data = localStorage.getItem('floorPlanData');
+                if (data) {
+                    objects = JSON.parse(data);
+                    drawObjects();
+                    toolMessage.textContent = 'Plan loaded successfully!';
+                } else {
+                    toolMessage.textContent = 'No saved plan data found.';
+                }
+            } catch (e) {
+                toolMessage.textContent = 'Error loading plan data.';
+            }
+        };
+
+        // Attach listeners
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', stopDrawing);
+        canvas.addEventListener('mouseleave', () => { if(isDrawing) stopDrawing(); }); 
+
+        // Initial setup
+        drawObjects(); 
+        document.getElementById('mode-rect').classList.add('active');
+    </script>
+</body>
+</html>
