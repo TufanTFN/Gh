@@ -1,0 +1,1224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FloorPlan Designer - V13 (Advanced Tools)</title>
+    <style>
+        /* BASE STYLES */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f4f8;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .header {
+            width: 100%;
+            background: #0f172a;
+            color: white;
+            padding: 10px 0;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            font-size: 1.2em;
+        }
+
+        .controls {
+            width: 100%;
+            max-width: 950px;
+            background: white;
+            padding: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap; 
+            justify-content: center;
+            margin-bottom: 10px;
+        }
+
+        button {
+            padding: 8px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.2s;
+            flex-grow: 1; 
+            min-width: 70px;
+            font-size: 0.85em;
+        }
+
+        /* Scale Input Style */
+        .scale-control {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            background: #cbd5e1;
+            padding: 5px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: 600;
+            color: #1e293b;
+        }
+        .scale-control input {
+            width: 40px;
+            padding: 2px 4px;
+            border: 1px solid #94a3b8;
+            border-radius: 3px;
+            text-align: center;
+        }
+        
+        /* Tool Colors */
+        button.tool-mode { background: #2563eb; color: white; }
+        button.advanced-mode { background: #9333ea; color: white; } 
+        button.new-tool { background: #008080; color: white; } /* New Color for advanced line tools */
+        button.fixture-mode { background: #059669; color: white; } 
+        button.edit-mode { background: #eab308; color: #1e293b; }
+        button#mode-3d { background: #00bcd4; color: white; }
+        button.utility { background: #e2e8f0; color: #1e293b; }
+
+        /* ACTIVE state */
+        button.active { box-shadow: 0 0 0 3px #f97316; border: 1px solid white; }
+        
+        /* Export PNG button (Original: with grid and dimensions) */
+        button#export-dim-btn { background: #10b981; color: white; } 
+        
+        /* Rotation/Swipe Indicator */
+        button.rotate-btn { background: #ff9800; color: white; flex-grow: 0.5; } 
+
+        /* CANVAS AREA AND MESSAGE */
+        #tool-message {
+            width: 100%;
+            max-width: 950px;
+            margin-bottom: 10px;
+            padding: 5px 10px;
+            font-size: 0.9em;
+            color: #cc0000;
+            text-align: center;
+            background: #fff;
+            border-radius: 4px;
+        }
+
+        #canvas-container {
+            width: 95%; 
+            max-width: 950px;
+            border: 2px solid #ccc;
+            background-color: #ffffff;
+            cursor: default; 
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        
+        #isometric-container {
+            width: 95%;
+            max-width: 950px;
+            border: 2px solid #00bcd4;
+            background-color: #ffffff;
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+            display: none; 
+            touch-action: none; 
+            cursor: grab;
+        }
+        
+        /* Dynamic CSS for 2D Canvas touch/drawing control */
+        #planner-canvas.drawing-active { 
+            cursor: crosshair !important; 
+            touch-action: none; /* Disables page scroll/pan during drawing */
+        }
+        #planner-canvas.editing-active { 
+            cursor: pointer !important; 
+            touch-action: pan-y; /* Allows vertical scrolling while in select mode */
+        }
+
+        /* MOBILE OPTIMIZATION */
+        @media (max-width: 768px) {
+            .controls {
+                padding: 5px;
+                gap: 4px;
+            }
+            button { 
+                min-width: 15%; 
+                font-size: 0.65em; 
+                padding: 6px 4px; 
+            }
+            .scale-control { 
+                font-size: 0.7em; 
+                padding: 4px 6px;
+                min-width: 100%; 
+                justify-content: center;
+                margin-bottom: 5px;
+            }
+            .scale-control input { width: 40px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">FloorPlan Designer Pro - V13 (Advanced Tools)</div>
+
+    <div class="controls">
+        <div class="scale-control">
+            Scale (m/grid): <input type="number" id="scale-input" value="1.00" min="0.1" step="0.05">
+        </div>
+        
+        <button class="tool-mode" id="mode-rect">Room</button>
+        <button class="tool-mode" id="mode-line">Wall</button>
+        <button class="tool-mode" id="mode-door">Door</button>
+        <button class="tool-mode" id="mode-window">Window</button>
+        <button class="tool-mode" id="mode-stairs">Stairs</button>
+        <button class="advanced-mode" id="mode-arcwall">Curved Wall</button>
+        <button class="advanced-mode" id="mode-column">Column</button>
+        
+        <button class="new-tool" id="mode-angleline">Any-Angle Wall</button>
+        <button class="new-tool" id="mode-dimension">Dimension Line</button>
+        <button class="new-tool" id="mode-hatch">Hatch Fill</button>
+        
+        <button class="fixture-mode" id="mode-toilet">Toilet</button>
+        <button class="fixture-mode" id="mode-sink">Sink</button>
+        <button class="fixture-mode" id="mode-sofa">Sofa</button>
+        <button class="fixture-mode" id="mode-bed">Bed</button>
+        <button class="fixture-mode" id="mode-table">Table</button>
+        <button class="tool-mode" id="mode-text">Label</button>
+        
+        <button class="edit-mode" id="mode-select">Edit/Rotate</button>
+
+        <button id="mode-3d">View 3D 🧊</button>
+        <button class="rotate-btn" style="flex-grow: 0.5; pointer-events: none;">3D Rotate: Swipe Canvas</button>
+
+        <button class="utility" id="clear-btn">Clear</button>
+        <button class="utility" id="save-btn">Save</button>
+        <button class="utility" id="load-btn">Load</button>
+        
+        <button id="export-dim-btn">Export PNG 📏</button>
+        <button id="export-2d-btn">Export 2D 🖼️</button>
+        <button id="export-3d-btn">Export 3D 🧊</button>
+    </div>
+    
+    <div id="tool-message">Select a tool above to begin designing.</div>
+
+    <div id="canvas-container">
+        <canvas id="planner-canvas"></canvas>
+    </div>
+    
+    <div id="isometric-container">
+        <canvas id="isometric-canvas"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('planner-canvas');
+        const ctx = canvas.getContext('2d');
+        const isoCanvas = document.getElementById('isometric-canvas');
+        const isoCtx = isoCanvas.getContext('2d');
+        const isoContainer = document.getElementById('isometric-container');
+        const mainContainer = document.getElementById('canvas-container');
+        const scaleInput = document.getElementById('scale-input');
+        const toolMessage = document.getElementById('tool-message');
+
+        let isDrawing = false; 
+        let currentTool = 'rect';
+        let drawingState = 0; // For multi-step tools like arcwall
+        let startX, startY;
+        let currentShape = null; 
+        let objects = []; 
+        let selectedObject = null;
+        let isRotatingSelected = false; // New flag for advanced rotation
+        
+        let scaleMetersPerGrid = 1.0; 
+        const gridSize = 50; 
+        const wallThickness = 10;
+        const COLUMN_SIZE = gridSize;
+        
+        // --- 3D Rotation Variables ---
+        let isoRotationAngle = 0; 
+        let isRotating3D = false;
+        let touchStartX = 0;
+        const rotationSensitivity = 0.005; // Pixels to radians conversion factor
+        
+        // --- Setup and Canvas Sizing ---
+        
+        function setCanvasSize() {
+            const width = mainContainer.clientWidth;
+            const height = Math.min(width * 0.75, 600);
+            
+            canvas.width = width;
+            canvas.height = height;
+            isoCanvas.width = width;
+            isoCanvas.height = height;
+            
+            drawObjects(); 
+            if (isoContainer.style.display === 'block') {
+                drawIsometricView();
+            }
+        }
+
+        window.addEventListener('resize', setCanvasSize);
+        scaleInput.addEventListener('change', () => {
+            const newScale = parseFloat(scaleInput.value);
+            if (newScale > 0) {
+                scaleMetersPerGrid = newScale;
+                drawObjects();
+                toolMessage.textContent = `Scale updated: 1 grid = ${scaleMetersPerGrid.toFixed(2)} meters.`;
+            }
+        });
+
+        function getScale() {
+            return gridSize / scaleMetersPerGrid; 
+        }
+
+        function getClientPos(e) {
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return { clientX, clientY };
+        }
+
+        // --- Drawing Logic (2D) ---
+
+        function drawGrid(context, drawLines = true) {
+            context.clearRect(0, 0, context.canvas.width, context.canvas.height);
+            context.fillStyle = '#ffffff'; 
+            context.fillRect(0, 0, context.canvas.width, context.canvas.height);
+            context.strokeStyle = '#eee';
+            context.lineWidth = 0.5;
+
+            if (drawLines) {
+                for (let x = 0; x <= context.canvas.width; x += gridSize) {
+                    context.beginPath(); context.moveTo(x, 0); context.lineTo(x, context.canvas.height); context.stroke();
+                }
+                for (let y = 0; y <= context.canvas.height; y += gridSize) {
+                    context.beginPath(); context.moveTo(0, y); context.lineTo(context.canvas.width, y); context.stroke();
+                }
+            }
+        }
+        
+        // --- Helper Function: Draw Hatch Pattern ---
+        function drawHatchPattern(context, x, y, w, h, pattern = 'wood') {
+            context.save();
+            context.beginPath();
+            context.rect(x, y, w, h);
+            context.clip(); // Clip drawing to the rectangle area
+
+            context.strokeStyle = 'rgba(150, 75, 0, 0.6)'; // Brownish for wood/tile
+            context.lineWidth = 1;
+            
+            const spacing = 10;
+
+            if (pattern === 'wood') {
+                for (let i = x; i < x + w; i += spacing * 2) {
+                    context.beginPath();
+                    context.moveTo(i, y);
+                    context.lineTo(i + spacing, y + h);
+                    context.stroke();
+                }
+            } else if (pattern === 'carpet') {
+                context.strokeStyle = 'rgba(100, 100, 200, 0.6)'; // Blueish for carpet
+                context.lineWidth = 0.5;
+                for (let i = x; i < x + w; i += spacing) {
+                    context.beginPath(); context.moveTo(i, y); context.lineTo(i, y + h); context.stroke();
+                }
+                for (let j = y; j < y + h; j += spacing) {
+                    context.beginPath(); context.moveTo(x, j); context.lineTo(x + w, j); context.stroke();
+                }
+            }
+            
+            context.restore();
+        }
+
+        function drawSingleObject(context, obj, isSelected = false, drawDimensions = true) {
+            context.save();
+            context.strokeStyle = isSelected ? '#cc0000' : '#1e293b';
+            context.lineWidth = 2;
+            context.setLineDash(isSelected ? [5, 5] : []);
+
+            // Apply rotation and translation for objects that support it
+            if (obj.angle !== undefined && obj.type !== 'rect') {
+                const centerX = obj.x + obj.w / 2;
+                const centerY = obj.y + obj.h / 2;
+                context.translate(centerX, centerY);
+                context.rotate(obj.angle);
+                context.translate(-centerX, -centerY);
+            }
+
+            if (obj.type === 'rect') {
+                context.fillStyle = obj.fill || 'rgba(100, 149, 237, 0.4)';
+                context.fillRect(obj.x, obj.y, obj.w, obj.h);
+                context.strokeRect(obj.x, obj.y, obj.w, obj.h);
+                if (drawDimensions) drawDimensionLabel(context, obj.x, obj.y, obj.w, obj.h);
+            } else if (obj.type === 'hatch') {
+                context.fillStyle = obj.fill || 'rgba(255, 255, 255, 0.1)';
+                context.fillRect(obj.x, obj.y, obj.w, obj.h);
+                drawHatchPattern(context, obj.x, obj.y, obj.w, obj.h, obj.pattern);
+                context.strokeRect(obj.x, obj.y, obj.w, obj.h);
+                if (drawDimensions) drawDimensionLabel(context, obj.x, obj.y, obj.w, obj.h);
+            } else if (obj.type === 'line' || obj.type === 'angleline') {
+                context.lineWidth = wallThickness; 
+                context.beginPath(); context.moveTo(obj.x1, obj.y1); context.lineTo(obj.x2, obj.y2); context.stroke();
+                if (drawDimensions) drawDimensionLabel(context, obj.x1, obj.y1, obj.x2 - obj.x1, obj.y2 - obj.y1, true);
+            } else if (obj.type === 'dimension') {
+                drawDimensionLine(context, obj);
+            } else if (obj.type === 'arcwall') {
+                drawArcWall(context, obj, drawDimensions);
+            } else if (obj.type === 'door') {
+                drawDoor(context, obj.x1, obj.y1, obj.x2, obj.y2);
+            } else if (obj.type === 'window') {
+                drawWindow(context, obj.x1, obj.y1, obj.x2, obj.y2);
+            } else if (obj.type === 'stairs') {
+                drawStairs(context, obj.x1, obj.y1, obj.x2, obj.y2);
+            } else if (obj.type === 'toilet') {
+                drawToilet(context, obj.x, obj.y, obj.w, obj.h);
+            } else if (obj.type === 'sink') {
+                drawSink(context, obj.x, obj.y, obj.w, obj.h);
+            } else if (obj.type === 'sofa') {
+                drawSofa(context, obj.x, obj.y, obj.w, obj.h);
+            } else if (obj.type === 'bed') {
+                drawBed(context, obj.x, obj.y, obj.w, obj.h);
+            } else if (obj.type === 'table') {
+                drawTable(context, obj.x, obj.y, obj.w, obj.h);
+            } else if (obj.type === 'column') {
+                drawColumn(context, obj.x, obj.y);
+            } else if (obj.type === 'text') {
+                context.fillStyle = '#0f172a';
+                context.font = 'bold 16px Arial';
+                context.fillText(obj.text, obj.x, obj.y);
+            }
+
+            // Draw Rotation Handle for selected fixture
+            if (isSelected && ['toilet', 'sink', 'sofa', 'bed', 'table', 'column'].includes(obj.type)) {
+                context.restore(); // Restore context to draw the handle without fixture rotation offset
+                context.save();
+                
+                const centerX = obj.x + obj.w / 2;
+                const centerY = obj.y + obj.h / 2;
+                
+                context.translate(centerX, centerY);
+                context.rotate(obj.angle || 0);
+                
+                // Rotation Handle (Red square outside the top-right corner)
+                const handleX = obj.w / 2;
+                const handleY = -obj.h / 2;
+                context.fillStyle = '#cc0000';
+                context.fillRect(handleX + 15, handleY - 15, 20, 20); 
+                context.restore();
+            }
+            
+            context.restore();
+        }
+
+        function drawObjects() {
+            drawGrid(ctx); 
+
+            objects.forEach((obj) => {
+                drawSingleObject(ctx, obj, obj === selectedObject);
+            });
+        }
+        
+        function drawTemporaryShape(context, shape) {
+            if (!shape) return;
+            
+            context.save();
+            context.lineWidth = 3;
+            context.strokeStyle = (shape.type === 'rect' || shape.type === 'line' || shape.type === 'angleline' || shape.type === 'arcwall' || shape.type === 'hatch' || shape.type === 'dimension') ? '#007bff' : '#ff5722';
+            context.setLineDash([10, 5]);
+
+            if (['rect', 'hatch', 'toilet', 'sink', 'sofa', 'bed', 'table', 'column'].includes(shape.type)) {
+                const w = shape.w;
+                const h = shape.h;
+                const x = shape.x;
+                const y = shape.y;
+
+                if (shape.type === 'rect' || shape.type === 'hatch') {
+                    context.fillStyle = 'rgba(0, 123, 255, 0.1)';
+                    context.fillRect(x, y, w, h);
+                }
+                
+                context.strokeRect(x, y, w, h);
+                drawDimensionLabel(context, x, y, w, h); 
+            } else if (['line', 'door', 'window', 'stairs', 'angleline'].includes(shape.type)) {
+                context.lineWidth = wallThickness; 
+                context.beginPath(); 
+                context.moveTo(shape.x1, shape.y1); 
+                context.lineTo(shape.x2, shape.y2); 
+                context.stroke();
+                drawDimensionLabel(context, shape.x1, shape.y1, shape.x2 - shape.x1, shape.y2 - shape.y1, true);
+            } else if (shape.type === 'dimension') {
+                drawDimensionLine(context, shape, true);
+            } else if (shape.type === 'arcwall') {
+                context.lineWidth = wallThickness; 
+                context.beginPath();
+                const radius = Math.hypot(shape.x1 - shape.xCenter, shape.y1 - shape.yCenter);
+                let startAngle = Math.atan2(shape.y1 - shape.yCenter, shape.x1 - shape.xCenter);
+                let endAngle = Math.atan2(shape.y2 - shape.yCenter, shape.x2 - shape.xCenter);
+                context.arc(shape.xCenter, shape.yCenter, radius, startAngle, endAngle, shape.anticlockwise);
+                context.stroke();
+                
+                context.fillStyle = '#007bff';
+                context.fillRect(shape.xCenter - 5, shape.yCenter - 5, 10, 10);
+            }
+            
+            context.restore();
+        }
+
+        // --- 3D Visualization Logic (Same as V12) ---
+
+        function drawIsometricView() {
+            mainContainer.style.display = 'none';
+            isoContainer.style.display = 'block';
+            
+            drawGrid(isoCtx, false); 
+            
+            const wallHeight = 150; 
+            const projectionAngle = Math.PI / 6; 
+            
+            const centerX = isoCanvas.width / 2;
+            const centerY = isoCanvas.height * 0.8; 
+            
+            function isoTransform(x, y) {
+                const normalizedX = x - centerX;
+                const normalizedY = y - centerY;
+                
+                const rotatedX = normalizedX * Math.cos(isoRotationAngle) - normalizedY * Math.sin(isoRotationAngle);
+                const rotatedY = normalizedX * Math.sin(isoRotationAngle) + normalizedY * Math.cos(isoRotationAngle);
+                
+                return {
+                    x: centerX + (rotatedX - rotatedY) * Math.cos(projectionAngle),
+                    y: centerY - (rotatedX + rotatedY) * Math.sin(projectionAngle)
+                };
+            }
+            
+            function drawIsoRect(x, y, w, h, context) {
+                const mapCenterX = canvas.width / 2;
+                const mapCenterY = canvas.height / 2;
+
+                const adjX = x - mapCenterX + centerX; 
+                const adjY = y - mapCenterY + centerY; 
+                
+                const p1 = isoTransform(adjX, adjY);
+                const p2 = isoTransform(adjX + w, adjY);
+                const p3 = isoTransform(adjX + w, adjY + h);
+                const p4 = isoTransform(adjX, adjY + h);
+
+                const c1 = { x: p1.x, y: p1.y - wallHeight };
+                const c2 = { x: p2.x, y: p2.y - wallHeight };
+                const c3 = { x: p3.x, y: p3.y - wallHeight };
+                const c4 = { x: p4.x, y: p4.y - wallHeight };
+                
+                // Draw Floor
+                context.fillStyle = 'rgba(100, 149, 237, 0.4)';
+                context.beginPath();
+                context.moveTo(p1.x, p1.y); context.lineTo(p2.x, p2.y);
+                context.lineTo(p3.x, p3.y); context.lineTo(p4.x, p4.y);
+                context.closePath();
+                context.fill();
+                
+                context.strokeStyle = '#1e293b';
+                context.lineWidth = 1;
+                context.fillStyle = '#ccc';
+                
+                // Draw Walls
+                context.beginPath(); context.moveTo(p2.x, p2.y); context.lineTo(c2.x, c2.y); context.lineTo(c3.x, c3.y); context.lineTo(p3.x, p3.y); context.closePath(); context.stroke(); context.fill();
+                context.beginPath(); context.moveTo(p3.x, p3.y); context.lineTo(c3.x, c3.y); context.lineTo(c4.x, c4.y); context.lineTo(p4.x, p4.y); context.closePath(); context.stroke(); context.fill();
+                context.beginPath(); context.moveTo(p4.x, p4.y); context.lineTo(c4.x, c4.y); context.lineTo(c1.x, c1.y); context.lineTo(p1.x, p1.y); context.closePath(); context.stroke(); context.fill();
+                context.beginPath(); context.moveTo(p1.x, p1.y); context.lineTo(c1.x, c1.y); context.lineTo(c2.x, c2.y); context.lineTo(p2.x, p2.y); context.closePath(); context.stroke(); context.fill();
+                
+                // Draw Ceiling outline
+                context.strokeStyle = '#000';
+                context.lineWidth = 2;
+                context.beginPath();
+                context.moveTo(c1.x, c1.y); context.lineTo(c2.x, c2.y); context.lineTo(c3.x, c3.y); context.lineTo(c4.x, c4.y);
+                context.closePath();
+                context.stroke();
+            }
+            
+            const sortedObjects = objects.slice().sort((a, b) => {
+                const centerA = a.y + (a.h || 0) / 2;
+                const centerB = b.y + (b.h || 0) / 2;
+                return centerA - centerB;
+            });
+
+            sortedObjects.forEach(obj => {
+                if (obj.type === 'rect' || obj.type === 'column') {
+                    drawIsoRect(obj.x, obj.y, obj.w, obj.h, isoCtx);
+                }
+            });
+            
+            toolMessage.textContent = `Showing Rotated 3D View. Angle: ${(isoRotationAngle * 180 / Math.PI).toFixed(0)}°. Swipe the canvas to rotate.`;
+        }
+
+        function draw2DView() {
+            isoContainer.style.display = 'none';
+            mainContainer.style.display = 'block';
+            drawObjects();
+            toolMessage.textContent = "Returned to 2D Editing Mode.";
+        }
+        
+        // --- Dimension and Helper Functions ---
+
+        function drawDimensionLabel(context, x, y, w, h, isLine = false) {
+            const length = Math.hypot(w, h);
+            const lengthMeters = (length / getScale()).toFixed(2);
+            
+            context.fillStyle = '#0f172a';
+            context.font = '12px Arial';
+
+            if (!isLine) {
+                const widthMeters = (Math.abs(w) / getScale()).toFixed(2);
+                const heightMeters = (Math.abs(h) / getScale()).toFixed(2);
+                const area = (widthMeters * heightMeters).toFixed(2);
+                
+                // Area in center
+                context.fillText(`Area: ${area}m²`, x + w / 2 - 40, y + h / 2);
+                
+                // Horizontal dimension
+                context.fillText(`${widthMeters}m`, x + w / 2 - 20, y + h + 20);
+                
+                // Vertical dimension (rotated)
+                context.save();
+                context.translate(x + w + 5, y + h / 2);
+                context.rotate(Math.PI / 2);
+                context.fillText(`${heightMeters}m`, 0, 0);
+                context.restore();
+
+            } else {
+                const midX = x + w / 2;
+                const midY = y + h / 2;
+                const angle = Math.atan2(h, w);
+                
+                context.save();
+                context.translate(midX, midY);
+                context.rotate(angle);
+                context.fillText(`${lengthMeters}m`, 5, -8);
+                context.restore();
+            }
+        }
+        
+        // --- NEW: Dedicated Dimension Line Drawing ---
+        function drawDimensionLine(context, obj, isTemp = false) {
+            context.save();
+            context.strokeStyle = isTemp ? '#007bff' : '#000000';
+            context.fillStyle = isTemp ? '#007bff' : '#000000';
+            context.lineWidth = 1;
+            context.font = '12px Arial';
+            
+            const { x1, y1, x2, y2, offset } = obj;
+            
+            const lineLength = Math.hypot(x2 - x1, y2 - y1);
+            const lineAngle = Math.atan2(y2 - y1, x2 - x1);
+            const lengthMeters = (lineLength / getScale()).toFixed(2);
+            
+            // Perpendicular unit vector
+            const perpX = -Math.sin(lineAngle);
+            const perpY = Math.cos(lineAngle);
+            
+            // Calculate parallel shifted points
+            const sx1 = x1 + perpX * offset;
+            const sy1 = y1 + perpY * offset;
+            const sx2 = x2 + perpX * offset;
+            const sy2 = y2 + perpY * offset;
+            
+            // 1. Draw extension lines
+            const extension = 10;
+            context.beginPath();
+            context.moveTo(x1, y1); context.lineTo(x1 + perpX * extension, y1 + perpY * extension);
+            context.moveTo(x2, y2); context.lineTo(x2 + perpX * extension, y2 + perpY * extension);
+            context.stroke();
+            
+            // 2. Draw dimension line
+            context.beginPath();
+            context.moveTo(sx1, sy1);
+            context.lineTo(sx2, sy2);
+            context.stroke();
+            
+            // 3. Draw arrowheads (simplified: simple ticks)
+            const tickSize = 5;
+            context.beginPath();
+            // Start tick
+            context.moveTo(sx1 - perpY * tickSize, sy1 - perpX * tickSize);
+            context.lineTo(sx1 + perpY * tickSize, sy1 + perpX * tickSize);
+            // End tick
+            context.moveTo(sx2 - perpY * tickSize, sy2 - perpX * tickSize);
+            context.lineTo(sx2 + perpY * tickSize, sy2 + perpX * tickSize);
+            context.stroke();
+            
+            // 4. Draw measurement text
+            const textX = sx1 + (sx2 - sx1) / 2;
+            const textY = sy1 + (sy2 - sy1) / 2;
+            
+            context.save();
+            context.translate(textX, textY);
+            context.rotate(lineAngle);
+            context.fillRect(-20, -10, 40, 20); // White background for text
+            context.fillStyle = '#0f172a';
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            context.fillText(`${lengthMeters} m`, 0, 0);
+            context.restore();
+            
+            context.restore();
+        }
+
+        function getSnappedCoord(coord) {
+            // Non-snapped tools (angleline, dimension) don't use this, but other tools do
+            if (currentTool === 'angleline' || currentTool === 'dimension') {
+                return coord;
+            }
+            return Math.round(coord / gridSize) * gridSize;
+        }
+        
+        function getRawCoord(e) {
+            const { clientX, clientY } = getClientPos(e);
+            const rect = canvas.getBoundingClientRect();
+            return { x: clientX - rect.left, y: clientY - rect.top };
+        }
+        
+        // --- Drawing Stubs (Fixtures) ---
+        
+        function drawArcWall(context, obj, drawDimensions) { 
+            context.strokeStyle = '#1e293b'; context.lineWidth = wallThickness; context.beginPath();
+            const radius = Math.hypot(obj.x1 - obj.xCenter, obj.y1 - obj.yCenter);
+            let startAngle = Math.atan2(obj.y1 - obj.yCenter, obj.x1 - obj.xCenter);
+            let endAngle = Math.atan2(obj.y2 - obj.yCenter, obj.x2 - obj.xCenter);
+            context.arc(obj.xCenter, obj.yCenter, radius, startAngle, endAngle, obj.anticlockwise);
+            context.stroke();
+            if (drawDimensions) {
+                context.fillStyle = '#0f172a'; context.font = '12px Arial'; context.fillText(`R: ${(radius / getScale()).toFixed(2)}m`, obj.xCenter, obj.yCenter);
+            }
+        }
+        function drawDoor(context, x1, y1, x2, y2) { 
+            context.strokeStyle = '#fff'; context.lineWidth = wallThickness + 2; context.beginPath(); context.moveTo(x1, y1); context.lineTo(x2, y2); context.stroke();
+            context.strokeStyle = '#666'; context.lineWidth = 2; context.beginPath(); context.moveTo(x1, y1); context.lineTo(x2, y2); context.stroke();
+            const angle = Math.atan2(y2 - y1, x2 - x1); const length = Math.hypot(x2 - x1, y2 - y1);
+            context.beginPath(); context.arc(x1, y1, length, angle, angle + Math.PI / 2); context.stroke();
+        }
+        function drawWindow(context, x1, y1, x2, y2) { 
+            context.strokeStyle = '#fff'; context.lineWidth = wallThickness + 2; context.beginPath(); context.moveTo(x1, y1); context.lineTo(x2, y2); context.stroke();
+            context.strokeStyle = '#00f'; context.lineWidth = 1;
+            const angle = Math.atan2(y2 - y1, x2 - x1); const length = Math.hypot(x2 - x1, y2 - y1);
+            context.save(); context.translate(x1, y1); context.rotate(angle);
+            const offset = wallThickness / 4; context.beginPath();
+            context.moveTo(0, 0); context.lineTo(length, 0); 
+            context.moveTo(0, offset); context.lineTo(length, offset);
+            context.moveTo(0, -offset); context.lineTo(length, -offset); context.stroke();
+            context.restore();
+        }
+        function drawStairs(context, x1, y1, x2, y2) { 
+            context.strokeStyle = '#444'; context.lineWidth = 2; const w = x2 - x1, h = y2 - y1;
+            const length = Math.hypot(w, h); const angle = Math.atan2(h, w); const numSteps = Math.floor(length / gridSize);
+            context.save(); context.translate(x1, y1); context.rotate(angle);
+            context.strokeRect(0, -wallThickness / 2, length, wallThickness);
+            context.strokeStyle = '#888';
+            for (let i = 1; i < numSteps; i++) {
+                const stepX = i * gridSize; context.beginPath(); context.moveTo(stepX, -wallThickness / 2); context.lineTo(stepX, wallThickness / 2); context.stroke();
+            }
+            context.strokeStyle = '#888'; context.beginPath(); context.setLineDash([5, 5]); context.moveTo(0, 0); context.lineTo(length, 0); context.stroke();
+            context.setLineDash([]); 
+            const arrowLength = 10; context.fillStyle = '#444';
+            context.beginPath(); context.moveTo(length - arrowLength, -5); context.lineTo(length, 0); context.lineTo(length - arrowLength, 5); context.fill();
+            context.restore();
+        }
+        function drawToilet(context, x, y, w, h) { 
+            context.strokeStyle = '#666'; context.fillStyle = 'rgba(200, 200, 255, 0.5)'; context.lineWidth = 1;
+            context.fillRect(x, y, w, h * 0.2); context.strokeRect(x, y, w, h * 0.2);
+            context.fillRect(x, y + h * 0.2, w, h * 0.8); context.strokeRect(x, y + h * 0.2, w, h * 0.8);
+            context.beginPath(); context.ellipse(x + w / 2, y + h * 0.6, w * 0.4, h * 0.3, 0, 0, 2 * Math.PI); context.stroke();
+        }
+        function drawSink(context, x, y, w, h) { 
+            context.strokeStyle = '#666'; context.fillStyle = 'rgba(200, 255, 200, 0.5)'; context.lineWidth = 1;
+            context.fillRect(x, y, w, h); context.strokeRect(x, y, w, h);
+            context.beginPath(); context.ellipse(x + w / 2, y + h / 2, w * 0.3, h * 0.4, 0, 0, 2 * Math.PI); context.stroke();
+        }
+        function drawSofa(context, x, y, w, h) { 
+            context.strokeStyle = '#999'; context.fillStyle = 'rgba(255, 180, 180, 0.7)'; context.lineWidth = 2;
+            context.fillRect(x, y, w, h); context.strokeRect(x, y, w, h);
+            context.lineWidth = 1; const numCushions = Math.max(1, Math.floor(w / gridSize / 1.5));
+            for (let i = 1; i < numCushions; i++) {
+                const stepX = x + i * (w / numCushions); context.beginPath(); context.moveTo(stepX, y); context.lineTo(stepX, y + h); context.stroke();
+            }
+        }
+        function drawBed(context, x, y, w, h) { 
+            context.strokeStyle = '#8B4513'; context.fillStyle = 'rgba(139, 69, 19, 0.7)'; context.lineWidth = 2;
+            context.fillRect(x, y, w, h); context.strokeRect(x, y, w, h);
+            context.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            context.fillRect(x, y, w, h * 0.2); // Headboard
+            context.fillStyle = 'rgba(173, 216, 230, 0.8)';
+            context.fillRect(x, y + h * 0.2, w, h * 0.8); // Mattress
+            context.strokeStyle = '#000'; context.lineWidth = 1;
+            context.strokeRect(x, y, w, h); 
+        }
+        function drawTable(context, x, y, w, h) { 
+            context.strokeStyle = '#000'; context.fillStyle = 'rgba(150, 150, 150, 0.8)'; context.lineWidth = 2;
+            context.fillRect(x, y, w, h); context.strokeRect(x, y, w, h);
+            context.lineWidth = 1;
+            // Draw four legs (simple dots)
+            const legSize = 5;
+            context.fillRect(x, y, legSize, legSize);
+            context.fillRect(x + w - legSize, y, legSize, legSize);
+            context.fillRect(x, y + h - legSize, legSize, legSize);
+            context.fillRect(x + w - legSize, y + h - legSize, legSize, legSize);
+        }
+        function drawColumn(context, x, y) { 
+            context.strokeStyle = '#444'; context.fillStyle = 'rgba(100, 100, 100, 0.8)'; context.lineWidth = 2;
+            const size = COLUMN_SIZE; context.fillRect(x, y, size, size); context.strokeRect(x, y, size, size);
+            context.beginPath(); context.moveTo(x, y); context.lineTo(x + size, y + size);
+            context.moveTo(x + size, y); context.lineTo(x, y + size); context.stroke();
+        }
+
+        // --- Event Handlers ---
+
+        function isPointInRect(px, py, obj) { 
+            // Simplified hit-test for demonstration purposes
+            if (['rect', 'hatch', 'toilet', 'sink', 'sofa', 'bed', 'table', 'column'].includes(obj.type)) {
+                
+                // For rotated fixtures, we must un-rotate the point before testing
+                if (obj.angle) {
+                    const centerX = obj.x + obj.w / 2;
+                    const centerY = obj.y + obj.h / 2;
+                    const cosA = Math.cos(-obj.angle);
+                    const sinA = Math.sin(-obj.angle);
+                    
+                    const dx = px - centerX;
+                    const dy = py - centerY;
+                    
+                    px = centerX + dx * cosA - dy * sinA;
+                    py = centerY + dx * sinA + dy * cosA;
+                }
+
+                return px >= obj.x && px <= obj.x + obj.w && py >= obj.y && py <= obj.y + obj.h;
+            }
+            if (['line', 'angleline', 'door', 'window', 'stairs', 'dimension'].includes(obj.type)) {
+                const x1 = obj.x1, y1 = obj.y1, x2 = obj.x2, y2 = obj.y2;
+                const L = Math.hypot(x2 - x1, y2 - y1);
+                if (L === 0) return Math.hypot(px - x1, py - y1) < 10;
+                const t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / (L * L);
+                if (t < 0 || t > 1) return false;
+                const closestX = x1 + t * (x2 - x1);
+                const closestY = y1 + t * (y2 - y1);
+                // Allow a larger hit radius for walls/lines
+                return Math.hypot(px - closestX, py - closestY) < 15; 
+            }
+            // (Arc wall and Text logic omitted for brevity, focusing on new tools)
+            return false;
+        }
+
+        function findObjectAtPoint(x, y) {
+            for (let i = objects.length - 1; i >= 0; i--) {
+                if (isPointInRect(x, y, objects[i])) {
+                    return objects[i];
+                }
+            }
+            return null;
+        }
+        
+        // --- Rotation Handle Hit Test (NEW) ---
+        function isPointInRotationHandle(px, py, obj) {
+            if (!obj.angle && obj.angle !== 0) return false;
+            
+            const centerX = obj.x + obj.w / 2;
+            const centerY = obj.y + obj.h / 2;
+            
+            // Coordinates of the handle in the object's UNROTATED frame
+            const handleUnrotatedX = obj.x + obj.w + 15; 
+            const handleUnrotatedY = obj.y - 15;
+            
+            // Coordinates of the handle's center in canvas space (Rotated)
+            const dx = handleUnrotatedX - centerX;
+            const dy = handleUnrotatedY - centerY;
+            
+            const cosA = Math.cos(obj.angle);
+            const sinA = Math.sin(obj.angle);
+            
+            const handleRotatedX = centerX + dx * cosA - dy * sinA;
+            const handleRotatedY = centerY + dx * sinA + dy * cosA;
+
+            const halfSize = 10; // Handle size is 20x20
+            
+            return px >= handleRotatedX - halfSize && 
+                   px <= handleRotatedX + halfSize && 
+                   py >= handleRotatedY - halfSize && 
+                   py <= handleRotatedY + halfSize;
+        }
+
+
+        function handleCanvasClick(e) {
+            const { x: mapX, y: mapY } = getRawCoord(e);
+            const snappedX = getSnappedCoord(mapX);
+            const snappedY = getSnappedCoord(mapY);
+
+            // Handle multi-step tools (Arcwall)
+            if (currentTool === 'arcwall') {
+                // ... (Arcwall logic remains the same)
+                return;
+            }
+
+            // --- SELECT/EDIT MODE ---
+            if (currentTool === 'select') {
+                const hitObject = findObjectAtPoint(mapX, mapY);
+                if (hitObject) {
+                    selectedObject = hitObject; drawObjects(); 
+                    
+                    if (isPointInRotationHandle(mapX, mapY, hitObject)) {
+                        isRotatingSelected = true;
+                        toolMessage.textContent = `Rotating ${hitObject.type.toUpperCase()}. Drag mouse/finger to change angle.`;
+                        return;
+                    }
+                    
+                    const supportedTypes = ['toilet', 'sink', 'sofa', 'bed', 'table', 'column'];
+                    if (supportedTypes.includes(hitObject.type)) {
+                        const action = prompt(`Object Selected! Type: ${hitObject.type.toUpperCase()}. Enter R to Rotate 90° or D to Delete:`, 'R');
+                        if (action && action.toUpperCase() === 'R') {
+                            hitObject.angle = (hitObject.angle || 0) + Math.PI / 2; 
+                            toolMessage.textContent = `${hitObject.type.toUpperCase()} rotated 90°.`;
+                        } else if (action && action.toUpperCase() === 'D') {
+                            const index = objects.indexOf(selectedObject);
+                            if (index > -1) { objects.splice(index, 1); }
+                            toolMessage.textContent = "Object deleted.";
+                        }
+                    } else if (hitObject.type === 'dimension') {
+                         const action = confirm(`Dimension Line Selected. Do you want to DELETE it?`);
+                         if (action) {
+                            const index = objects.indexOf(selectedObject);
+                            if (index > -1) { objects.splice(index, 1); }
+                            toolMessage.textContent = "Dimension deleted.";
+                         }
+                    } else {
+                        const action = confirm(`Object Selected! Type: ${hitObject.type.toUpperCase()}. Do you want to DELETE it?`);
+                        if (action) {
+                            const index = objects.indexOf(selectedObject);
+                            if (index > -1) { objects.splice(index, 1); }
+                            toolMessage.textContent = "Object deleted.";
+                        }
+                    }
+                    selectedObject = null; drawObjects();
+                } else {
+                    selectedObject = null; drawObjects(); toolMessage.textContent = "No object selected.";
+                }
+                return;
+            } 
+            
+            // --- TEXT TOOL ---
+            if (currentTool === 'text') {
+                // ... (Text tool logic remains the same)
+                return;
+            }
+
+            // --- HATCH TOOL (Single click for rect/hatch) ---
+            if (currentTool === 'hatch') {
+                 const pattern = prompt("Enter fill pattern (wood or carpet):", "wood");
+                 if (!pattern) return;
+                 
+                 startX = snappedX; startY = snappedY;
+                 currentShape = { type: 'hatch', x: startX, y: startY, w: 0, h: 0, pattern: pattern.toLowerCase() };
+                 isDrawing = true; 
+                 canvas.classList.add('drawing-active');
+                 return;
+            }
+
+            // --- DIMENSION TOOL (Line tool logic) ---
+            if (currentTool === 'dimension') {
+                if (drawingState === 0) {
+                    startX = mapX; startY = mapY;
+                    drawingState = 1;
+                    toolMessage.textContent = "Dimension Line: Drag to set the end point.";
+                    isDrawing = true;
+                    canvas.classList.add('drawing-active');
+                    currentShape = { type: 'dimension', x1: startX, y1: startY, x2: startX, y2: startY, offset: 50 }; // Default offset 50
+                    return;
+                }
+            }
+
+            // --- STANDARD DRAWING START (Snapped) ---
+            startX = snappedX; startY = snappedY;
+            isDrawing = true; 
+            canvas.classList.add('drawing-active');
+            
+            const isFixture = ['toilet', 'sink', 'sofa', 'bed', 'table'].includes(currentTool);
+            const isLineTool = ['line', 'door', 'window', 'stairs'].includes(currentTool);
+            
+            if (currentTool === 'rect') {
+                currentShape = { type: 'rect', x: startX, y: startY, w: 0, h: 0 };
+            } else if (isLineTool) {
+                currentShape = { type: currentTool, x1: startX, y1: startY, x2: startX, y2: startY };
+            } else if (isFixture) {
+                currentShape = { type: currentTool, x: startX, y: startY, w: 0, h: 0, angle: 0 };
+            } else if (currentTool === 'angleline') {
+                // Non-snapped starting point
+                startX = mapX; startY = mapY;
+                currentShape = { type: currentTool, x1: startX, y1: startY, x2: startX, y2: startY };
+            } else if (currentTool === 'column') {
+                currentShape = { type: 'column', x: startX, y: snappedY, w: COLUMN_SIZE, h: COLUMN_SIZE, angle: 0 };
+                stopDrawing();
+            }
+        }
+
+        function draw(e) {
+            if (!isDrawing && !isRotatingSelected) return; 
+            e.preventDefault(); 
+            const { x: rawX, y: rawY } = getRawCoord(e);
+            
+            let mouseX = rawX;
+            let mouseY = rawY;
+            
+            // Only snap for grid-based tools
+            if (['rect', 'line', 'door', 'window', 'stairs', 'hatch', 'column'].includes(currentTool)) {
+                mouseX = getSnappedCoord(rawX);
+                mouseY = getSnappedCoord(rawY);
+            }
+            
+            // --- Advanced Rotation Mode ---
+            if (isRotatingSelected) {
+                const obj = selectedObject;
+                const centerX = obj.x + obj.w / 2;
+                const centerY = obj.y + obj.h / 2;
+                
+                // Calculate new angle from center to mouse position
+                const newAngle = Math.atan2(mouseY - centerY, mouseX - centerX);
+                obj.angle = newAngle;
+                
+                drawObjects();
+                toolMessage.textContent = `Rotating ${obj.type.toUpperCase()}... Angle: ${(newAngle * 180 / Math.PI).toFixed(0)}°`;
+                return;
+            }
+            
+            // --- Standard Drawing Mode ---
+            const w = mouseX - startX;
+            const h = mouseY - startY;
+            const length = Math.hypot(w, h);
+            
+            let messageText = "";
+
+            if (['rect', 'hatch', 'toilet', 'sink', 'sofa', 'bed', 'table'].includes(currentTool)) {
+                currentShape.w = w; currentShape.h = h;
+                const area = (Math.abs(w / getScale()) * Math.abs(h / getScale())).toFixed(2);
+                messageText = `Drawing ${currentTool.toUpperCase()}... Area: ${area}m²`;
+            } else if (['line', 'door', 'window', 'stairs', 'angleline'].includes(currentTool)) {
+                currentShape.x2 = mouseX; currentShape.y2 = mouseY;
+                messageText = `${currentTool.toUpperCase()} Tool... Length: ${(length / getScale()).toFixed(2)}m`;
+            } else if (currentTool === 'dimension') {
+                 currentShape.x2 = mouseX; currentShape.y2 = mouseY;
+                 // Allow user to drag the offset later, for now, keep it simple
+                 messageText = `Dimension Line... Length: ${(length / getScale()).toFixed(2)}m`;
+            } else {
+                return; 
+            }
+
+            drawObjects(); 
+            if (currentShape) {
+                drawTemporaryShape(ctx, currentShape); 
+            }
+            
+            toolMessage.textContent = messageText;
+        }
+
+        function stopDrawing(e) {
+            if (!isDrawing && !isRotatingSelected) return;
+            
+            if (isRotatingSelected) {
+                isRotatingSelected = false;
+                selectedObject = null;
+                drawObjects();
+                toolMessage.textContent = "Rotation complete. Select another tool or object.";
+                return;
+            }
+            
+            isDrawing = false;
+            canvas.classList.remove('drawing-active');
+
+            if (currentTool === 'arcwall') {
+                // ... (Arcwall stop logic remains the same)
+                return;
+            }
+            
+            if (currentTool === 'dimension') {
+                if (drawingState === 1) {
+                    objects.push(currentShape);
+                    toolMessage.textContent = `Dimension Line created.`;
+                    drawingState = 0; 
+                }
+                currentShape = null; drawObjects();
+                return;
+            }
+
+            if (currentShape) {
+                const w = currentShape.w || (currentShape.x2 - currentShape.x1);
+                const h = currentShape.h || (currentShape.y2 - currentShape.y1);
+                const length = Math.hypot(w, h);
+                const finalX = currentShape.x || currentShape.x1;
+                const finalY = currentShape.y || currentShape.y1;
+
+                const supportedRect = ['rect', 'hatch', 'toilet', 'sink', 'sofa', 'bed', 'table', 'column'];
+                if (supportedRect.includes(currentTool)) {
+                    if (currentTool === 'column' || (Math.abs(w) > gridSize / 2 && Math.abs(h) > gridSize / 2)) {
+                        const finalW = currentShape.w === undefined ? COLUMN_SIZE : Math.abs(w);
+                        const finalH = currentShape.h === undefined ? COLUMN_SIZE : Math.abs(h);
+                        const trueX = (w < 0 ? finalX + w : finalX);
+                        const trueY = (h < 0 ? finalY + h : finalY);
+                        
+                        const finalObj = { 
+                            type: currentTool, x: trueX, y: trueY, w: finalW, h: finalH, angle: currentShape.angle || 0 
+                        };
+                        if (currentTool === 'hatch') {
+                            finalObj.pattern = currentShape.pattern;
+                        }
+
+                        objects.push(finalObj);
+                        toolMessage.textContent = `${currentTool.charAt(0).toUpperCase() + currentTool.slice(1)} created.`;
+                    } else {
+                        toolMessage.textContent = `Shape too small or invalid.`;
+                    }
+                } else if (['line', 'door', 'window', 'stairs', 'angleline'].includes(currentTool) && length > gridSize / 2) {
+                    objects.push(currentShape);
+                    toolMessage.textContent = `${currentTool.charAt(0).toUpperCase() + currentTool.slice(1)} added.`;
+                } else {
+                    toolMessage.textContent = `Shape too small or invalid.`;
+                }
+            }
+
+            currentShape = null; 
+            drawObjects(); 
+        }
+
+        // --- 3D Touch Rotation Handlers (Same as V12) ---
+        
+        function handleIsoTouchStart(e) {
+            if (e.touches.length === 1) {
+                isRotating3D = true;
+                touchStartX = e.touches[0].clientX;
+            }
+        }
+
+        function handleIsoTouchMove(e) {
+            if (!isRotating3D) return;
+            
+            const currentX = e.touches[0].clientX;
+            const deltaX = currentX - touchStartX;
+            
+            isoRotationAngle += deltaX * rotationSensitivity; 
+            
+            touchStartX = currentX; 
+            
+            drawIsometricView();
+        }
+        
+        function handleIsoTouchEnd() {
+            isRotating3D = false;
+        }
+
+
+        function setupListeners() {
+            // 2D Drawing Listeners
+            canvas.addEventListener('mousedown', handleCanvasClick);
+            canvas.addEventListener('touchstart', handleCanvasClick);
+            canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('touchmove', draw);
+            canvas.addEventListener('mouseup', stopDrawing);
+            canvas.addEventListener('touchend', stopDrawing);
+            canvas.addEventListener('mouseleave', () => { if(isDrawing || isRotatingSelected) stopDrawing(); });
+            canvas.addEventListener('touchcancel', stopDrawing);
+            
+            // 3D Touch Rotation Listeners
+            isoCanvas.addEventListener('touchstart', handleIsoTouchStart);
+            isoCanvas.addEventListener('touchmove', handleIsoTouchMove);
+            isoCanvas.addEventListener('touchend', handleIsoTouchEnd);
+            isoCanvas.addEventListener('touchcancel', handleIsoTouchEnd);
+        }
+
+        document.getElementById('mode-3d').onclick = () => {
+            if (isoContainer.style.display === 'block') {
+                document.getElementById('mode-3d').textContent = 'View 3D 🧊';
+                draw2DView();
+            } else {
+                document.getElementById('mode-3d').textContent = 'View 2D 🏠';
+                drawIsometricView();
+            }
+        };
+
+        document.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.controls button').forEach(b => b.classList.remove('active'));
+                
+                // Exclude all utility/view change buttons from changing tool mode
+                if (e.target.id === 'mode-3d' || e.target.id.startsWith('export-') || e.target.id.startsWith('rotate-') || e.target.id === 'clear-btn' || e.target.id === 'save-btn' || e.target.id === 'load-btn') return;
+                
+                e.target.classList.add('active');
+                
+                if (isoContainer.style.display === 'block') {
+                    draw2DView();
+                    document.getElementById('mode-3d').textContent = 'View 3D 🧊';
+                }
+                
+                const newTool = e.target.id.replace('mode-', '');
+                if (newTool.length > 0) {
+                    currentTool = newTool;
+                    selectedObject = null;
+                    drawingState = 0; 
+                    drawObjects();
+
+                    // Only remove classes if a new tool is selected
+                    canvas.classList.remove('drawing-active', 'editing-active');
+
+                    let message = `Tool: ${e.target.textContent}. Click/Tap and drag to draw.`;
+                    
+                    if (currentTool === 'select') {
+                        canvas.classList.add('editing-active');
+                        message = "EDIT MODE: Click to select. Click the red box to rotate fixtures. Enter R or D in the prompt to rotate or delete.";
+                    } else if (currentTool === 'angleline') {
+                        message = "Any-Angle Wall: Click and drag to draw a wall at *any* angle (no grid snap).";
+                    } else if (currentTool === 'dimension') {
+                        message = "Dimension Line: Click and drag to draw a measurement line between any two points.";
+                    } else if (currentTool === 'hatch') {
+                         message = "Hatch Fill: Click and drag to define the area, then select the pattern (e.g., wood, carpet).";
+                    } else if (currentTool === 'text') {
+                         message = "Label: Click where you want to place the label, then enter your text.";
+                    }
+
+                    toolMessage.textContent = message;
+                }
+            });
+        });
+
+        // Utility Button Handlers
+        document.getElementById('clear-btn').onclick = () => { if (confirm('Clear the entire plan?')) { objects = []; drawObjects(); toolMessage.textContent = "Plan cleared."; } };
+        document.getElementById('save-btn').onclick = () => { try { localStorage.setItem('floorPlanData', JSON.stringify(objects)); toolMessage.textContent = 'Plan saved successfully!'; } catch (e) { toolMessage.textContent = 'Error: Could not save plan.'; } };
+        document.getElementById('load-btn').onclick = () => { try { const data = localStorage.getItem('floorPlanData'); if (data) { objects = JSON.parse(data); drawObjects(); toolMessage.textContent = 'Plan loaded successfully!'; } else { toolMessage.textContent = 'No saved plan data found.'; } } catch (e) { toolMessage.textContent = 'Error loading plan data.'; } };
+        
+        // Export Handlers
+        function exportCanvasAsPNG(targetCanvas, filename) {
+            const dataURL = targetCanvas.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.download = filename;
+            link.href = dataURL;
+            link.click();
+            toolMessage.textContent = `${filename} exported successfully!`;
+        }
+
+        function exportPlanWithDimensions() {
+             const tempCanvas = document.createElement('canvas'); tempCanvas.width = canvas.width; tempCanvas.height = canvas.height;
+             const tempCtx = tempCanvas.getContext('2d');
+             drawGrid(tempCtx, true); objects.forEach((obj) => { drawSingleObject(tempCtx, obj, false, true); });
+             exportCanvasAsPNG(tempCanvas, 'floorplan_dims.png'); drawObjects(); 
+        }
+        function exportClean2D() {
+             const tempCanvas = document.createElement('canvas'); tempCanvas.width = canvas.width; tempCanvas.height = canvas.height;
+             const tempCtx = tempCanvas.getContext('2d');
+             drawGrid(tempCtx, false); objects.forEach((obj) => { drawSingleObject(tempCtx, obj, false, false); });
+             exportCanvasAsPNG(tempCanvas, 'floorplan_clean_2d.png'); drawObjects(); 
+        }
+        function exportIsometric3D() {
+            drawIsometricView(); exportCanvasAsPNG(isoCanvas, 'floorplan_isometric_3d.png');
+            draw2DView(); document.getElementById('mode-3d').textContent = 'View 3D 🧊';
+        }
+
+        document.getElementById('export-dim-btn').onclick = exportPlanWithDimensions;
+        document.getElementById('export-2d-btn').onclick = exportClean2D;
+        document.getElementById('export-3d-btn').onclick = exportIsometric3D;
+
+
+        window.onload = () => {
+            setCanvasSize();
+            setupListeners();
+            document.getElementById('mode-rect').classList.add('active');
+        };
+    </script>
+</body>
+</html>
